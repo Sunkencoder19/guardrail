@@ -6,18 +6,22 @@ import {
   updateProjectController,
   deleteProjectController,
 } from "../controllers/project.controller.js";
+import { validate } from "../middleware/validation.middleware.js";
+import { createProjectSchema } from "../validators/project.validator.js";
+import authenticate from "../middleware/auth.middleware.js";
 
 const router = express.Router();
+router.use(authenticate);
 
 router
   .route("/")
-  .post(createProjectController)
+  .post(validate(createProjectSchema), createProjectController)
   .get(getAllProjectsController);
 
 router
   .route("/:id")
   .get(getProjectByIdController)
-  .put(updateProjectController)
+  .put(validate(createProjectSchema), updateProjectController)
   .delete(deleteProjectController);
 
 export default router;

@@ -8,7 +8,10 @@ import {
 
 export const createProjectController = async (req, res, next) => {
   try {
-    const project = await createProject(req.body);
+    const project = await createProject({
+      ...req.body,
+      owner: req.user._id,
+    });
 
     res.status(201).json({
       success: true,
@@ -22,7 +25,7 @@ export const createProjectController = async (req, res, next) => {
 
 export const getAllProjectsController = async (req, res, next) => {
   try {
-    const projects = await getAllProjects();
+    const projects = await getAllProjects(req.user._id);
 
     res.status(200).json({
       success: true,
