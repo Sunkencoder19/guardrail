@@ -39,7 +39,10 @@ export const getAllProjectsController = async (req, res, next) => {
 
 export const getProjectByIdController = async (req, res, next) => {
   try {
-    const project = await getProjectById(req.params.id);
+    const project = await getProjectById(
+      req.params.id,
+      req.user._id
+    );
 
     res.status(200).json({
       success: true,
@@ -52,7 +55,11 @@ export const getProjectByIdController = async (req, res, next) => {
 
 export const updateProjectController = async (req, res, next) => {
   try {
-    const project = await updateProject(req.params.id, req.body);
+    const project = await updateProject(
+      req.params.id,
+      req.user._id,
+      req.body
+    );
 
     res.status(200).json({
       success: true,
@@ -66,7 +73,10 @@ export const updateProjectController = async (req, res, next) => {
 
 export const deleteProjectController = async (req, res, next) => {
   try {
-    await deleteProject(req.params.id);
+    await deleteProject(
+      req.params.id,
+      req.user._id
+    );
 
     res.status(200).json({
       success: true,

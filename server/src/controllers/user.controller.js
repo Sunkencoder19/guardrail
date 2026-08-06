@@ -34,3 +34,10 @@ export const loginUserController = async (req, res, next) => {
     next(error);
   }
 };
+
+export const getCurrentUserController = async (req, res) => {
+  res.status(200).json({
+    success: true,
+    data: req.user,
+  });
+};
