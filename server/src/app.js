@@ -4,6 +4,7 @@ import errorHandler from "./middleware/error.middleware.js";
 import projectRoutes from "./routes/project.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import scanRoutes from "./routes/scan.routes.js";
+import findingRoutes from "./routes/finding.routes.js";
 
 const app = express();
 
@@ -16,6 +17,8 @@ app.use("/api/projects", projectRoutes);
 app.use("/api/scans", scanRoutes);
 
 app.use("/api/users", userRoutes);
+
+app.use("/api/findings", findingRoutes);
 
 app.use(errorHandler);
 
