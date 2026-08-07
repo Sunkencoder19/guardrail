@@ -4,6 +4,7 @@ import ApiError from "../utils/ApiError.js";
 import { cloneRepository } from "./githubClone.service.js";
 import { runSemgrep } from "./semgrep.service.js";
 import { createFindingsFromSemgrep } from "./finding.service.js";
+import { cleanupRepository } from "./cleanup.service.js";
 
 export const startScan = async (projectId, userId) => {
   // Verify the project belongs to the logged-in user
@@ -22,9 +23,11 @@ export const startScan = async (projectId, userId) => {
     status: "Scanning",
   });
 
+  let repositoryPath;
+
   try {
     // Clone repository
-    const repositoryPath = await cloneRepository(
+    repositoryPath = await cloneRepository(
       project.repositoryUrl,
       scan._id
     );
@@ -45,7 +48,7 @@ export const startScan = async (projectId, userId) => {
 
     await scan.save();
 
-    console.log(`✅ Scan completed`);
+    console.log("✅ Scan completed");
     console.log(`📌 Findings saved: ${findingCount}`);
 
     return scan;
@@ -54,6 +57,8 @@ export const startScan = async (projectId, userId) => {
     await scan.save();
 
     throw error;
+  } finally {
+    cleanupRepository(repositoryPath);
   }
 };
 

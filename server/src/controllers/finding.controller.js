@@ -9,7 +9,7 @@ export const createFindingController = async (req, res, next) => {
     const finding = await createFinding(
       req.params.scanId,
       req.user._id,
-      req.body
+      req.body,
     );
 
     res.status(201).json({
@@ -24,15 +24,17 @@ export const createFindingController = async (req, res, next) => {
 
 export const getScanFindingsController = async (req, res, next) => {
   try {
-    const findings = await getScanFindings(
+    const result = await getScanFindings(
       req.params.scanId,
-      req.user._id
+      req.user._id,
+      req.query
     );
 
     res.status(200).json({
       success: true,
-      count: findings.length,
-      data: findings,
+      count: result.findings.length,
+      pagination: result.pagination,
+      data: result.findings,
     });
   } catch (error) {
     next(error);
@@ -41,10 +43,7 @@ export const getScanFindingsController = async (req, res, next) => {
 
 export const getFindingByIdController = async (req, res, next) => {
   try {
-    const finding = await getFindingById(
-      req.params.findingId,
-      req.user._id
-    );
+    const finding = await getFindingById(req.params.findingId, req.user._id);
 
     res.status(200).json({
       success: true,

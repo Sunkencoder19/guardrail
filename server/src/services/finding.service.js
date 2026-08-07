@@ -7,7 +7,6 @@ const FALLBACK_FINDING_TITLE = "Semgrep Finding";
 const toStringValue = (value, fallback = "") => {
   if (typeof value === "string") {
     const trimmed = value.trim();
-
     return trimmed.length > 0 ? trimmed : fallback;
   }
 
@@ -48,19 +47,27 @@ const normalizeSeverity = (severity) => {
 const normalizeLine = (line) => {
   const parsedLine = Number(line);
 
-  return Number.isInteger(parsedLine) && parsedLine > 0 ? parsedLine : null;
+  return Number.isInteger(parsedLine) && parsedLine > 0
+    ? parsedLine
+    : null;
 };
 
 const mapSemgrepResultToFinding = (projectId, scanId, result) => ({
   project: projectId,
   scan: scanId,
-  title: toStringValue(result.check_id, FALLBACK_FINDING_TITLE),
+  title: toStringValue(
+    result.check_id,
+    FALLBACK_FINDING_TITLE
+  ),
   description: toStringValue(
     result.extra?.message,
     "No description available"
   ),
   severity: normalizeSeverity(result.extra?.severity),
-  category: toStringValue(result.extra?.metadata?.category, "General"),
+  category: toStringValue(
+    result.extra?.metadata?.category,
+    "General"
+  ),
   file: toStringValue(result.path, null),
   line: normalizeLine(result.start?.line),
   recommendation: toStringValue(
@@ -69,15 +76,17 @@ const mapSemgrepResultToFinding = (projectId, scanId, result) => ({
   ),
 });
 
-export const createFinding = async (scanId, userId, findingData) => {
-  // Verify scan exists
+export const createFinding = async (
+  scanId,
+  userId,
+  findingData
+) => {
   const scan = await Scan.findById(scanId).populate("project");
 
   if (!scan) {
     throw new ApiError(404, "Scan not found");
   }
 
-  // Verify ownership
   if (scan.project.owner.toString() !== userId.toString()) {
     throw new ApiError(403, "Unauthorized");
   }
@@ -91,7 +100,11 @@ export const createFinding = async (scanId, userId, findingData) => {
   return finding;
 };
 
-export const getScanFindings = async (scanId, userId) => {
+export const getScanFindings = async (
+  scanId,
+  userId,
+  query
+) => {
   const scan = await Scan.findById(scanId).populate("project");
 
   if (!scan) {
@@ -102,16 +115,50 @@ export const getScanFindings = async (scanId, userId) => {
     throw new ApiError(403, "Unauthorized");
   }
 
-  const findings = await Finding.find({
-    scan: scanId,
-  }).sort({
-    severity: 1,
-  });
+  const {
+    severity,
+    page = 1,
+    limit = 20,
+  } = query;
 
-  return findings;
+  const filter = {
+    scan: scanId,
+  };
+
+  if (severity) {
+    filter.severity = severity;
+  }
+
+  const totalFindings = await Finding.countDocuments(filter);
+
+  const findings = await Finding.find(filter)
+    .sort({
+      severity: 1,
+    })
+    .skip((Number(page) - 1) * Number(limit))
+    .limit(Number(limit));
+
+  return {
+    findings,
+    pagination: {
+      currentPage: Number(page),
+      pageSize: Number(limit),
+      totalItems: totalFindings,
+      totalPages: Math.ceil(
+        totalFindings / Number(limit)
+      ),
+      hasNextPage:
+        Number(page) <
+        Math.ceil(totalFindings / Number(limit)),
+      hasPreviousPage: Number(page) > 1,
+    },
+  };
 };
 
-export const getFindingById = async (findingId, userId) => {
+export const getFindingById = async (
+  findingId,
+  userId
+) => {
   const finding = await Finding.findById(findingId)
     .populate("project")
     .populate("scan");
@@ -133,34 +180,42 @@ export const createFindingsFromSemgrep = async (
   semgrepResults
 ) => {
   if (!Array.isArray(semgrepResults)) {
-    throw new ApiError(500, "Semgrep results payload is not an array");
+    throw new ApiError(
+      500,
+      "Semgrep results payload is not an array"
+    );
   }
 
   const findings = [];
   const invalidFindings = [];
 
   for (const result of semgrepResults) {
-    const finding = mapSemgrepResultToFinding(projectId, scanId, result);
-    const validationError = new Finding(finding).validateSync();
+    const finding = mapSemgrepResultToFinding(
+      projectId,
+      scanId,
+      result
+    );
 
-    if (validationError) {
+    try {
+      await new Finding(finding).validate();
+      findings.push(finding);
+    } catch (validationError) {
       invalidFindings.push({
         finding,
-        errors: Object.values(validationError.errors).map((error) => ({
-          path: error.path,
-          message: error.message,
-        })),
+        errors: Object.values(validationError.errors).map(
+          (error) => ({
+            path: error.path,
+            message: error.message,
+          })
+        ),
       });
-      continue;
     }
-
-    findings.push(finding);
   }
 
   if (invalidFindings.length > 0) {
     console.warn(
-      "Skipped invalid Semgrep findings before MongoDB insertion",
-      JSON.stringify(invalidFindings, null, 2)
+      "Skipped invalid Semgrep findings:",
+      invalidFindings.length
     );
   }
 
