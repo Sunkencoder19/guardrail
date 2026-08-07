@@ -5,6 +5,7 @@ import projectRoutes from "./routes/project.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import scanRoutes from "./routes/scan.routes.js";
 import findingRoutes from "./routes/finding.routes.js";
+import dashboardRoutes from "./routes/dashboard.routes.js";
 
 const app = express();
 
@@ -19,6 +20,8 @@ app.use("/api/scans", scanRoutes);
 app.use("/api/users", userRoutes);
 
 app.use("/api/findings", findingRoutes);
+
+app.use("/api/dashboard", dashboardRoutes);
 
 app.use(errorHandler);
 
