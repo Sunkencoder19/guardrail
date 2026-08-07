@@ -15,7 +15,12 @@ export const fetchRepository = async (repositoryUrl) => {
     }
 
     const response = await axios.get(
-      `https://api.github.com/repos/${owner}/${repo}`
+      `https://api.github.com/repos/${owner}/${repo}`,
+      {
+        headers: {
+      Authorization: `Bearer ${process.env.GITHUB_TOKEN}`,
+        },
+      }
     );
 
     const data = response.data;
