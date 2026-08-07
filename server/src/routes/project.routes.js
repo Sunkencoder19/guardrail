@@ -7,8 +7,11 @@ import {
   deleteProjectController,
 } from "../controllers/project.controller.js";
 import { validate } from "../middleware/validation.middleware.js";
-import { createProjectSchema } from "../validators/project.validator.js";
 import authenticate from "../middleware/auth.middleware.js";
+import {
+  createProjectSchema,
+  updateProjectSchema,
+} from "../validators/project.validator.js";
 
 const router = express.Router();
 router.use(authenticate);
@@ -21,7 +24,7 @@ router
 router
   .route("/:id")
   .get(getProjectByIdController)
-  .put(validate(createProjectSchema), updateProjectController)
+  .put(validate(updateProjectSchema), updateProjectController)
   .delete(deleteProjectController);
 
 export default router;

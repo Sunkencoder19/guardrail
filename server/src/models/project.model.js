@@ -23,7 +23,42 @@ const projectSchema = new mongoose.Schema(
 
     status: {
       type: String,
+      enum: ["Pending", "Scanning", "Completed", "Failed"],
       default: "Pending",
+    },
+
+    // GitHub Metadata
+    repositoryName: {
+      type: String,
+    },
+
+    description: {
+      type: String,
+      default: null,
+    },
+
+    defaultBranch: {
+      type: String,
+      default: "main",
+    },
+
+    visibility: {
+      type: String,
+    },
+
+    stars: {
+      type: Number,
+      default: 0,
+    },
+
+    forks: {
+      type: Number,
+      default: 0,
+    },
+
+    language: {
+      type: String,
+      default: null,
     },
   },
   {

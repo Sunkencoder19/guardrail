@@ -1,8 +1,22 @@
 import Project from "../models/project.model.js";
 import ApiError from "../utils/ApiError.js";
+import { fetchRepository } from "./github.service.js";
 
 export const createProject = async (projectData) => {
-  const project = await Project.create(projectData);
+  // Fetch repository details from GitHub
+  const repository = await fetchRepository(projectData.repositoryUrl);
+
+  // Create project with GitHub metadata
+  const project = await Project.create({
+    ...projectData,
+    repositoryName: repository.repositoryName,
+    description: repository.description,
+    defaultBranch: repository.defaultBranch,
+    visibility: repository.visibility,
+    stars: repository.stars,
+    forks: repository.forks,
+    language: repository.language,
+  });
 
   return project;
 };
@@ -29,6 +43,14 @@ export const getProjectById = async (id, userId) => {
 };
 
 export const updateProject = async (id, userId, projectData) => {
+  // Prevent repository URL from being changed
+  if (projectData.repositoryUrl) {
+    throw new ApiError(
+      400,
+      "Repository URL cannot be updated. Create a new project instead."
+    );
+  }
+
   const project = await Project.findOneAndUpdate(
     {
       _id: id,
@@ -46,7 +68,7 @@ export const updateProject = async (id, userId, projectData) => {
   }
 
   return project;
-};
+  };
 
 export const deleteProject = async (id, userId) => {
   const project = await Project.findOneAndDelete({
