@@ -1,4 +1,5 @@
 import express from "express";
+import cors from "cors";
 import indexRoutes from "./routes/index.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
 import projectRoutes from "./routes/project.routes.js";
@@ -9,6 +10,13 @@ import dashboardRoutes from "./routes/dashboard.routes.js";
 import reportRoutes from "./routes/report.routes.js";
 
 const app = express();
+
+app.use(
+  cors({
+    origin: true,
+    credentials: true,
+  })
+);
 
 app.use(express.json());
 
