@@ -48,10 +48,37 @@ function App() {
       />
 
       <Route
-        path="/findings/:scanId"
+        path="/findings"
         element={
           <ProtectedRoute>
             <Findings />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/findings/:findingId"
+        element={
+          <ProtectedRoute>
+            <Findings />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports"
+        element={
+          <ProtectedRoute>
+            <Report />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/reports/:reportId"
+        element={
+          <ProtectedRoute>
+            <Report />
           </ProtectedRoute>
         }
       />
