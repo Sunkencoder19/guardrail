@@ -52,7 +52,7 @@ function Register() {
         password,
       });
 
-      alert("Account created successfully!");
+      toast.success("Account created successfully!");
 
       navigate("/login");
     } catch (err) {

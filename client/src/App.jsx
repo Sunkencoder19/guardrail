@@ -9,11 +9,12 @@ import Findings from "./pages/Findings";
 import Report from "./pages/Report";
 import NotFound from "./pages/NotFound";
 import ProtectedRoute from "./routes/ProtectedRoute";
+import Landing from "./pages/Landing";
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Login />} />
+      <Route path="/" element={<Landing />} />
 
       <Route path="/login" element={<Login />} />
 
