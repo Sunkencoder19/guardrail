@@ -23,6 +23,33 @@ const scanSchema = new mongoose.Schema(
       type: Date,
       default: null,
     },
+
+    summary: {
+      critical: {
+        type: Number,
+        default: 0,
+      },
+
+      high: {
+        type: Number,
+        default: 0,
+      },
+
+      medium: {
+        type: Number,
+        default: 0,
+      },
+
+      low: {
+        type: Number,
+        default: 0,
+      },
+
+      score: {
+        type: Number,
+        default: 100,
+      },
+    },
   },
   {
     timestamps: true,

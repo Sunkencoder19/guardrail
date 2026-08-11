@@ -1,1 +1,814 @@
 Design a premium, developer-first Guardrail Dashboard that feels like a blend of Bloomberg Terminal's information density and operational seriousness, GitHub Security's developer workflow, and Linear's clean spacing and polished interactions, while maintaining the exact dark visual language established by the landing page. The layout should consist of a compact left sidebar containing only Dashboard, Projects, Findings, and Reports (omit Settings for V1 since it has no meaningful functionality yet), with the user profile and logout positioned at the bottom, and a clean top navigation displaying a personalized greeting ("Good Afternoon, Fattesing 👋") on the left and Search, Notifications, and Profile controls on the right. The first and most dominant panel must be a large Security Health card showing the overall system status (e.g., SECURE), a prominent security score (e.g., 92/100), last scan timestamp, repository count, and total open findings, immediately answering whether the platform is secure. Below it, display a compact four-card metrics grid for Critical, High, Medium, and Low vulnerabilities, with each card designed to become clickable in the future. Include a Security Trend section featuring a clean line chart visualizing vulnerability trends over the last 30 days to indicate whether the project's security posture is improving, alongside a Recent Activity timeline that chronologically displays operational events such as repository cloned, Semgrep started, repository scanned, vulnerability detected, and report generated, making the application feel active without unnecessary animations. Add an Active Repositories table listing repository name, programming language, security score, last scan timestamp, and current status, followed by a Critical Findings panel highlighting the five highest-priority vulnerabilities (e.g., SQL Injection, Hardcoded Secret) with severity, affected file, and status, along with a "View All" action. Include a compact Quick Actions panel containing actions such as Scan Repository, Generate Report, and Add Repository for immediate workflows. The dashboard should use the established color palette (#0A0C10 background, #12151C cards, #20242E borders, #4C6FFF primary accent) with status colors reserved for Critical (red), High (orange), Medium (yellow), Low (blue/gray), and Healthy (green). Typography should use Space Grotesk exclusively for the greeting, Geist for all interface text, and JetBrains Mono for technical values, timestamps, and operational data. Motion should remain subtle and purposeful, limited to card hover states, animated counters, smooth chart rendering, and page transitions, avoiding flashy effects. Architect the dashboard as reusable components consisting of Sidebar, Topbar, SecurityHealth, MetricsGrid, TrendChart, RecentActivity, RepositoryTable, CriticalFindings, and QuickActions, while ensuring the entire interface answers three questions within seconds: Is everything okay? If not, where is the problem? What should I fix first? The overall experience should feel like a professional security operations center rather than a generic admin dashboard, prioritizing clarity, operational awareness, and meaningful information over decorative UI.
+
+
+
+
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/context/AuthContext";
+import {
+  ShieldCheck,
+  LayoutDashboard,
+  FolderGit2,
+  ListChecks,
+  FileText,
+  LogOut,
+  Search,
+  Bell,
+  GitBranch,
+  ScanLine,
+  CheckCircle2,
+  AlertTriangle,
+  ArrowRight,
+  PlusCircle,
+} from "lucide-react";
+
+/* ============================================================
+   Theme — matches the palette established on landing/login/register
+============================================================ */
+
+const STATUS = {
+  critical: "#EF4444", // red
+  high: "#F97316", // orange
+  medium: "#EAB308", // yellow
+  low: "#64748B", // blue/gray
+  healthy: "#2DD4A7", // green
+};
+
+const FONT = {
+  display: "'Space Grotesk', sans-serif", // reserved for the greeting only
+  body: "'Geist', 'Inter', sans-serif", // all other interface text
+  mono: "'JetBrains Mono', monospace", // technical values, timestamps, counts
+};
+
+/* ============================================================
+   Mock data — shaped like real API responses. Numbers stay
+   consistent with the marketing site's "51 findings" story
+   (5 critical + 17 high + 22 medium + 7 low).
+============================================================ */
+
+const SEVERITY_COUNTS = { critical: 5, high: 17, medium: 22, low: 7 };
+
+const TREND_DATA = [
+  78, 76, 77, 74, 72, 73, 70, 69, 71, 68, 66, 65, 63, 64, 61, 60, 58, 59, 56,
+  55, 53, 54, 52, 53, 51, 50, 51, 49, 51, 51,
+];
+
+const TREND_LABELS = ["Jul 11", "Jul 25", "Aug 09"];
+
+const RECENT_ACTIVITY = [
+  { type: "clone", text: "Repository cloned — juice-shop", time: "2m ago" },
+  { type: "scan_start", text: "Semgrep analysis started", time: "2m ago" },
+  { type: "finding", text: "Critical vulnerability detected — SQL Injection", time: "1m ago" },
+  { type: "scan_done", text: "Scan completed — 51 findings", time: "48s ago" },
+  { type: "report", text: "Report generated — juice-shop.pdf", time: "30s ago" },
+];
+
+const REPOSITORIES = [
+  { name: "juice-shop", language: "JavaScript", score: 61, lastScan: "2m ago", status: "Scanning" },
+  { name: "payments-api", language: "Python", score: 88, lastScan: "1h ago", status: "Secure" },
+  { name: "auth-service", language: "Go", score: 95, lastScan: "3h ago", status: "Secure" },
+  { name: "legacy-monolith", language: "PHP", score: 42, lastScan: "1d ago", status: "At Risk" },
+  { name: "mobile-app", language: "Kotlin", score: 79, lastScan: "6h ago", status: "Secure" },
+];
+
+const CRITICAL_FINDINGS = [
+  { severity: "Critical", rule: "SQL Injection", file: "routes/orders.js", line: 88, status: "Open" },
+  { severity: "Critical", rule: "Hardcoded Secret", file: "config/env.default.js", line: 14, status: "Open" },
+  { severity: "High", rule: "Insecure Deserialization", file: "utils/parse.js", line: 21, status: "Acknowledged" },
+  { severity: "High", rule: "Cross-Site Scripting", file: "views/search.ejs", line: 42, status: "Open" },
+  { severity: "Medium", rule: "Missing Rate Limiting", file: "routes/auth.js", line: 5, status: "Fixed" },
+];
+
+/* ============================================================
+   Hooks
+============================================================ */
+
+function usePrefersReducedMotion() {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const handler = (e) => setReduced(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+  return reduced;
+}
+
+// Counts up from 0 to `value` once, on mount / whenever value changes.
+function useAnimatedNumber(value, duration = 900) {
+  const reducedMotion = usePrefersReducedMotion();
+  const [display, setDisplay] = useState(reducedMotion ? value : 0);
+  const startRef = useRef(null);
+
+  useEffect(() => {
+    if (reducedMotion) {
+      setDisplay(value);
+      return;
+    }
+    startRef.current = null;
+    let raf;
+    const step = (timestamp) => {
+      if (startRef.current === null) startRef.current = timestamp;
+      const elapsed = timestamp - startRef.current;
+      const progress = Math.min(1, elapsed / duration);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplay(Math.round(eased * value));
+      if (progress < 1) raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value, duration, reducedMotion]);
+
+  return display;
+}
+
+/* ============================================================
+   Sidebar
+============================================================ */
+
+const NAV_ITEMS = [
+  { label: "Dashboard", to: "/dashboard", icon: LayoutDashboard },
+  { label: "Projects", to: "/projects", icon: FolderGit2 },
+  { label: "Findings", to: "/findings", icon: ListChecks },
+  { label: "Reports", to: "/reports", icon: FileText },
+];
+
+function Sidebar() {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, logout } = useAuth(); // adjust field names if your AuthContext differs
+
+  const handleLogout = () => {
+    logout();
+    navigate("/login");
+  };
+
+  return (
+    <aside className="hidden md:flex flex-col w-60 shrink-0 h-screen sticky top-0 border-r border-[#20242E] bg-[#0A0C10]">
+      <div className="flex items-center gap-2.5 px-5 h-16 border-b border-[#20242E]">
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-[#4C6FFF]/10 border border-[#4C6FFF]/30">
+          <ShieldCheck className="h-4 w-4 text-[#4C6FFF]" />
+        </div>
+        <span className="text-[15px] font-semibold tracking-tight text-[#F5F6F8]" style={{ fontFamily: FONT.display }}>
+          Guardrail
+        </span>
+      </div>
+
+      <nav className="flex-1 px-3 py-5 space-y-1">
+        {NAV_ITEMS.map((item) => {
+          const active = location.pathname === item.to;
+          return (
+            <Link
+              key={item.label}
+              to={item.to}
+              className={`flex items-center gap-3 rounded-md pl-[10px] pr-3 py-2 text-[13.5px] border-l-2 transition-colors ${
+                active
+                  ? "bg-[#4C6FFF]/10 text-[#F5F6F8] border-[#4C6FFF]"
+                  : "text-[#8B92A0] hover:text-[#F5F6F8] hover:bg-[#12151C] border-transparent"
+              }`}
+              style={{ fontFamily: FONT.body }}
+            >
+              <item.icon className="h-4 w-4" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </nav>
+
+      <div className="border-t border-[#20242E] px-3 py-4">
+        <div className="flex items-center gap-3 rounded-md px-2 py-2">
+          <div
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#4C6FFF]/15 text-[#8FA2FF] text-[13px]"
+            style={{ fontFamily: FONT.display }}
+          >
+            {(user?.name || "U").charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-[13px] text-[#F5F6F8]" style={{ fontFamily: FONT.body }}>
+              {user?.name || "User"}
+            </p>
+            <p className="truncate text-[11.5px] text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+              {user?.email || ""}
+            </p>
+          </div>
+          <button onClick={handleLogout} className="text-[#565D6D] hover:text-[#F0616B] transition-colors" aria-label="Log out">
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+/* ============================================================
+   Topbar
+============================================================ */
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good Morning";
+  if (hour < 17) return "Good Afternoon";
+  return "Good Evening";
+}
+
+function Topbar({ name = "there" }) {
+  return (
+    <header className="sticky top-0 z-20 flex items-center justify-between h-16 px-6 border-b border-[#20242E] bg-[#0A0C10]/90 backdrop-blur">
+      <h1 className="text-[19px] text-[#F5F6F8]" style={{ fontFamily: FONT.display }}>
+        {getGreeting()}, {name} 👋
+      </h1>
+
+      <div className="flex items-center gap-4">
+        <div className="hidden sm:flex items-center gap-2 rounded-md border border-[#20242E] bg-[#12151C] px-3 py-1.5 w-56">
+          <Search className="h-3.5 w-3.5 text-[#565D6D]" />
+          <input
+            placeholder="Search repositories, findings..."
+            className="bg-transparent text-[12.5px] text-[#F5F6F8] placeholder:text-[#565D6D] outline-none w-full"
+            style={{ fontFamily: FONT.body }}
+          />
+        </div>
+
+        <button className="relative text-[#8B92A0] hover:text-[#F5F6F8] transition-colors" aria-label="Notifications">
+          <Bell className="h-4.5 w-4.5" />
+          <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-[#4C6FFF]" />
+        </button>
+
+        <div
+          className="h-8 w-8 rounded-full bg-[#4C6FFF]/15 border border-[#4C6FFF]/30 flex items-center justify-center text-[12px] text-[#8FA2FF]"
+          style={{ fontFamily: FONT.display }}
+        >
+          {name.charAt(0).toUpperCase()}
+        </div>
+      </div>
+    </header>
+  );
+}
+
+/* ============================================================
+   SecurityHealth — signature element: a live EKG heartbeat
+   waveform scrolling along the bottom of the card. Real SVG,
+   seamless loop, colored by current status.
+============================================================ */
+
+function buildHeartbeatPath(repeats, unit = 100) {
+  let d = "M0,24";
+  for (let i = 0; i < repeats; i++) {
+    const o = i * unit;
+    d += ` L${o + 30},24 L${o + 36},8 L${o + 42},40 L${o + 48},24 L${o + unit},24`;
+  }
+  return d;
+}
+
+function Heartbeat({ reducedMotion, color }) {
+  const unitPath = buildHeartbeatPath(6, 100); // total width 600
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 overflow-hidden opacity-70">
+      <div className={reducedMotion ? "" : "animate-heartbeat"} style={{ width: "1200px" }}>
+        <svg width="1200" height="48" viewBox="0 0 1200 48" fill="none">
+          <path
+            d={unitPath}
+            stroke={color}
+            strokeWidth="1.5"
+            strokeLinejoin="round"
+            strokeLinecap="round"
+            style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
+          />
+          <g transform="translate(600,0)">
+            <path
+              d={unitPath}
+              stroke={color}
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+              strokeLinecap="round"
+              style={{ filter: `drop-shadow(0 0 4px ${color}80)` }}
+            />
+          </g>
+        </svg>
+      </div>
+    </div>
+  );
+}
+
+function Stat({ label, value, accent }) {
+  return (
+    <div>
+      <p className="text-[11px] text-[#565D6D] tracking-wide" style={{ fontFamily: FONT.mono }}>
+        {label.toUpperCase()}
+      </p>
+      <p className="mt-1 text-[20px]" style={{ fontFamily: FONT.mono, color: accent || "#F5F6F8" }}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function SecurityHealth({ score = 92, status = "SECURE", lastScan = "2 minutes ago", repoCount = 8, openFindings = 51 }) {
+  const reducedMotion = usePrefersReducedMotion();
+  const animatedScore = useAnimatedNumber(score);
+  const animatedRepos = useAnimatedNumber(repoCount);
+  const animatedFindings = useAnimatedNumber(openFindings);
+
+  const statusColor = status === "SECURE" ? STATUS.healthy : status === "AT RISK" ? STATUS.critical : STATUS.medium;
+
+  return (
+    <div className="relative overflow-hidden rounded-xl border border-[#20242E] bg-[#12151C] p-7">
+      <div
+        className="pointer-events-none absolute -top-24 -left-24 w-72 h-72 rounded-full blur-[100px] opacity-20"
+        style={{ background: statusColor }}
+      />
+
+      <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-8">
+        <div>
+          <div
+            className="inline-flex items-center gap-2 rounded-full border px-3 py-1"
+            style={{ borderColor: `${statusColor}40`, backgroundColor: `${statusColor}0D` }}
+          >
+            <span className="relative flex h-2 w-2">
+              <span
+                className={`absolute inline-flex h-full w-full rounded-full opacity-60 ${reducedMotion ? "" : "animate-ping"}`}
+                style={{ backgroundColor: statusColor }}
+              />
+              <span className="relative inline-flex h-2 w-2 rounded-full" style={{ backgroundColor: statusColor }} />
+            </span>
+            <span className="text-[12px] tracking-wide" style={{ fontFamily: FONT.mono, color: statusColor }}>
+              {status}
+            </span>
+          </div>
+
+          <div className="mt-5 flex items-baseline gap-2">
+            <span className="text-[56px] leading-none text-[#F5F6F8]" style={{ fontFamily: FONT.mono, fontWeight: 500 }}>
+              {animatedScore}
+            </span>
+            <span className="text-[18px] text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+              / 100
+            </span>
+          </div>
+          <p className="mt-1.5 text-[13px] text-[#8B92A0]" style={{ fontFamily: FONT.body }}>
+            Overall security score
+          </p>
+        </div>
+
+        <div className="grid grid-cols-3 gap-8 lg:gap-12">
+          <Stat label="Last Scan" value={lastScan} />
+          <Stat label="Repositories" value={animatedRepos} />
+          <Stat label="Open Findings" value={animatedFindings} accent={STATUS.critical} />
+        </div>
+      </div>
+
+      <Heartbeat reducedMotion={reducedMotion} color={statusColor} />
+    </div>
+  );
+}
+
+/* ============================================================
+   MetricsGrid — four severity cards, ready to become filters
+============================================================ */
+
+const METRIC_CONFIG = [
+  { key: "critical", label: "Critical", color: STATUS.critical },
+  { key: "high", label: "High", color: STATUS.high },
+  { key: "medium", label: "Medium", color: STATUS.medium },
+  { key: "low", label: "Low", color: STATUS.low },
+];
+
+function MetricCard({ label, value, color, onClick }) {
+  const animated = useAnimatedNumber(value);
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="text-left rounded-xl border border-[#20242E] bg-[#12151C] p-5 hover:border-[#2B303C] hover:-translate-y-0.5 transition-all duration-200"
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] tracking-wide" style={{ fontFamily: FONT.mono, color }}>
+          {label.toUpperCase()}
+        </span>
+        <span className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
+      </div>
+      <p className="mt-3 text-[28px] text-[#F5F6F8]" style={{ fontFamily: FONT.mono, fontWeight: 500 }}>
+        {animated}
+      </p>
+    </button>
+  );
+}
+
+function MetricsGrid({ counts, onSelect }) {
+  return (
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      {METRIC_CONFIG.map((c) => (
+        <MetricCard key={c.key} label={c.label} value={counts[c.key]} color={c.color} onClick={() => onSelect?.(c.key)} />
+      ))}
+    </div>
+  );
+}
+
+/* ============================================================
+   TrendChart — hand-rolled SVG line chart, no dependency,
+   draws itself in on mount
+============================================================ */
+
+function TrendChart({ data, labels }) {
+  const reducedMotion = usePrefersReducedMotion();
+  const pathRef = useRef(null);
+  const [length, setLength] = useState(0);
+  const [drawn, setDrawn] = useState(false);
+
+  const width = 600;
+  const height = 180;
+  const padding = 12;
+  const max = Math.max(...data);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+
+  const points = data.map((v, i) => {
+    const x = padding + (i / (data.length - 1)) * (width - padding * 2);
+    const y = padding + (1 - (v - min) / range) * (height - padding * 2);
+    return [x, y];
+  });
+
+  const linePath = points.map((p, i) => `${i === 0 ? "M" : "L"}${p[0]},${p[1]}`).join(" ");
+  const areaPath = `${linePath} L${points[points.length - 1][0]},${height - padding} L${points[0][0]},${height - padding} Z`;
+
+  useEffect(() => {
+    if (pathRef.current) setLength(pathRef.current.getTotalLength());
+  }, [data]);
+
+  useEffect(() => {
+    if (reducedMotion || !length) {
+      setDrawn(true);
+      return;
+    }
+    const raf = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(raf);
+  }, [length, reducedMotion]);
+
+  const improving = data[data.length - 1] < data[0];
+
+  return (
+    <div className="rounded-xl border border-[#20242E] bg-[#12151C] p-6 h-full">
+      <div className="flex items-center justify-between mb-4">
+        <div>
+          <h3 className="text-[15px] text-[#F5F6F8]" style={{ fontFamily: FONT.body, fontWeight: 500 }}>
+            Security Trend
+          </h3>
+          <p className="text-[12.5px] text-[#8B92A0]" style={{ fontFamily: FONT.body }}>
+            Open findings, last 30 days
+          </p>
+        </div>
+        <span
+          className="text-[12px] rounded-full px-2.5 py-1"
+          style={{
+            fontFamily: FONT.mono,
+            color: improving ? STATUS.healthy : STATUS.critical,
+            backgroundColor: improving ? `${STATUS.healthy}1A` : `${STATUS.critical}1A`,
+          }}
+        >
+          {improving ? "↓ Improving" : "↑ Worsening"}
+        </span>
+      </div>
+
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-40">
+        <defs>
+          <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#4C6FFF" stopOpacity="0.35" />
+            <stop offset="100%" stopColor="#4C6FFF" stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#trendFill)" opacity={drawn ? 1 : 0} style={{ transition: "opacity 0.6s ease 0.4s" }} />
+        <path
+          ref={pathRef}
+          d={linePath}
+          fill="none"
+          stroke="#4C6FFF"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            strokeDasharray: length,
+            strokeDashoffset: drawn ? 0 : length,
+            transition: reducedMotion ? "none" : "stroke-dashoffset 1.4s ease-out",
+          }}
+        />
+      </svg>
+
+      {labels && (
+        <div className="mt-2 flex justify-between text-[11px] text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+          <span>{labels[0]}</span>
+          <span>{labels[Math.floor(labels.length / 2)]}</span>
+          <span>{labels[labels.length - 1]}</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================
+   RecentActivity — chronological event timeline
+============================================================ */
+
+const ACTIVITY_ICONS = {
+  clone: GitBranch,
+  scan_start: ScanLine,
+  scan_done: CheckCircle2,
+  finding: AlertTriangle,
+  report: FileText,
+};
+
+const ACTIVITY_COLOR_BY_TYPE = {
+  finding: STATUS.high,
+  scan_done: STATUS.healthy,
+};
+
+function RecentActivity({ events }) {
+  return (
+    <div className="rounded-xl border border-[#20242E] bg-[#12151C] p-6 h-full">
+      <h3 className="text-[15px] text-[#F5F6F8] mb-5" style={{ fontFamily: FONT.body, fontWeight: 500 }}>
+        Recent Activity
+      </h3>
+      <div className="space-y-4">
+        {events.map((e, i) => {
+          const Icon = ACTIVITY_ICONS[e.type] || CheckCircle2;
+          const color = ACTIVITY_COLOR_BY_TYPE[e.type] || "#4C6FFF";
+          return (
+            <div key={i} className="flex items-start gap-3">
+              <div
+                className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                style={{ backgroundColor: `${color}1A` }}
+              >
+                <Icon className="h-3 w-3" style={{ color }} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-[13px] text-[#F5F6F8] leading-snug" style={{ fontFamily: FONT.body }}>
+                  {e.text}
+                </p>
+                <p className="text-[11px] text-[#565D6D] mt-0.5" style={{ fontFamily: FONT.mono }}>
+                  {e.time}
+                </p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   RepositoryTable — name, language, score, last scan, status
+============================================================ */
+
+const REPO_STATUS_STYLE = {
+  Secure: STATUS.healthy,
+  "At Risk": STATUS.critical,
+  Scanning: "#4C6FFF",
+};
+
+function RepositoryTable({ repos }) {
+  return (
+    <div className="rounded-xl border border-[#20242E] bg-[#12151C] overflow-hidden">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#20242E]">
+        <h3 className="text-[15px] text-[#F5F6F8]" style={{ fontFamily: FONT.body, fontWeight: 500 }}>
+          Active Repositories
+        </h3>
+        <span className="text-[12px] text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+          {repos.length} total
+        </span>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="w-full text-left">
+          <thead>
+            <tr className="border-b border-[#20242E]">
+              {["Repository", "Language", "Score", "Last Scan", "Status"].map((h) => (
+                <th key={h} className="px-6 py-3 text-[11px] tracking-wide text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+                  {h.toUpperCase()}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {repos.map((r) => (
+              <tr key={r.name} className="border-b border-[#20242E] last:border-0 hover:bg-[#0F1117] transition-colors">
+                <td className="px-6 py-3.5 text-[13.5px] text-[#F5F6F8]" style={{ fontFamily: FONT.body }}>
+                  {r.name}
+                </td>
+                <td className="px-6 py-3.5 text-[12.5px] text-[#8B92A0]" style={{ fontFamily: FONT.body }}>
+                  {r.language}
+                </td>
+                <td
+                  className="px-6 py-3.5 text-[13px]"
+                  style={{
+                    fontFamily: FONT.mono,
+                    color: r.score >= 80 ? STATUS.healthy : r.score >= 60 ? STATUS.medium : STATUS.critical,
+                  }}
+                >
+                  {r.score}
+                </td>
+                <td className="px-6 py-3.5 text-[12px] text-[#565D6D]" style={{ fontFamily: FONT.mono }}>
+                  {r.lastScan}
+                </td>
+                <td className="px-6 py-3.5">
+                  <span
+                    className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px]"
+                    style={{
+                      fontFamily: FONT.mono,
+                      color: REPO_STATUS_STYLE[r.status],
+                      backgroundColor: `${REPO_STATUS_STYLE[r.status]}1A`,
+                    }}
+                  >
+                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: REPO_STATUS_STYLE[r.status] }} />
+                    {r.status}
+                  </span>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   CriticalFindings — top priority vulnerabilities
+============================================================ */
+
+const FINDING_SEVERITY_COLOR = {
+  Critical: STATUS.critical,
+  High: STATUS.high,
+  Medium: STATUS.medium,
+  Low: STATUS.low,
+};
+
+const FINDING_STATUS_COLOR = {
+  Open: STATUS.critical,
+  Acknowledged: STATUS.medium,
+  Fixed: STATUS.healthy,
+};
+
+function CriticalFindings({ findings, onViewAll }) {
+  return (
+    <div className="rounded-xl border border-[#20242E] bg-[#12151C] overflow-hidden h-full">
+      <div className="flex items-center justify-between px-6 py-4 border-b border-[#20242E]">
+        <h3 className="text-[15px] text-[#F5F6F8]" style={{ fontFamily: FONT.body, fontWeight: 500 }}>
+          Critical Findings
+        </h3>
+        <button
+          onClick={onViewAll}
+          className="inline-flex items-center gap-1 text-[12.5px] text-[#8FA2FF] hover:text-[#B0BEFF] transition-colors"
+          style={{ fontFamily: FONT.body }}
+        >
+          View All <ArrowRight className="h-3 w-3" />
+        </button>
+      </div>
+
+      <div className="divide-y divide-[#20242E]">
+        {findings.map((f) => (
+          <div key={f.rule} className="flex items-center justify-between px-6 py-4 hover:bg-[#0F1117] transition-colors">
+            <div className="flex items-center gap-3 min-w-0">
+              <span
+                className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-medium"
+                style={{
+                  color: FINDING_SEVERITY_COLOR[f.severity],
+                  backgroundColor: `${FINDING_SEVERITY_COLOR[f.severity]}1A`,
+                  fontFamily: FONT.mono,
+                }}
+              >
+                {f.severity}
+              </span>
+              <div className="min-w-0">
+                <p className="text-[13.5px] text-[#F5F6F8] truncate" style={{ fontFamily: FONT.body }}>
+                  {f.rule}
+                </p>
+                <p className="text-[11.5px] text-[#565D6D] truncate" style={{ fontFamily: FONT.mono }}>
+                  {f.file}:{f.line}
+                </p>
+              </div>
+            </div>
+            <span
+              className="shrink-0 text-[11px] rounded-full px-2.5 py-1"
+              style={{
+                color: FINDING_STATUS_COLOR[f.status],
+                backgroundColor: `${FINDING_STATUS_COLOR[f.status]}1A`,
+                fontFamily: FONT.mono,
+              }}
+            >
+              {f.status}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   QuickActions
+============================================================ */
+
+const QUICK_ACTIONS = [
+  { icon: ScanLine, label: "Scan Repository", desc: "Run a new Semgrep scan" },
+  { icon: FileText, label: "Generate Report", desc: "Export findings as PDF" },
+  { icon: PlusCircle, label: "Add Repository", desc: "Connect a new GitHub repo" },
+];
+
+function QuickActions({ onAction }) {
+  return (
+    <div className="rounded-xl border border-[#20242E] bg-[#12151C] p-6 h-full">
+      <h3 className="text-[15px] text-[#F5F6F8] mb-4" style={{ fontFamily: FONT.body, fontWeight: 500 }}>
+        Quick Actions
+      </h3>
+      <div className="space-y-2">
+        {QUICK_ACTIONS.map((a) => (
+          <button
+            key={a.label}
+            onClick={() => onAction?.(a.label)}
+            className="w-full flex items-center gap-3 rounded-md border border-[#20242E] px-4 py-3 text-left hover:border-[#4C6FFF]/40 hover:bg-[#4C6FFF]/5 transition-all duration-200"
+          >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-[#4C6FFF]/10 border border-[#4C6FFF]/30">
+              <a.icon className="h-4 w-4 text-[#4C6FFF]" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[13px] text-[#F5F6F8]" style={{ fontFamily: FONT.body }}>
+                {a.label}
+              </p>
+              <p className="text-[11.5px] text-[#8B92A0]" style={{ fontFamily: FONT.body }}>
+                {a.desc}
+              </p>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================
+   Dashboard — composes everything into the SOC-style layout.
+   Order answers, in sequence: is everything okay? if not,
+   where's the problem? what should I fix first?
+============================================================ */
+
+function Dashboard() {
+  const totalOpenFindings = Object.values(SEVERITY_COUNTS).reduce((a, b) => a + b, 0);
+
+  return (
+    <div className="flex min-h-screen bg-[#0A0C10] text-[#F5F6F8]">
+      <Sidebar />
+
+      <div className="flex-1 min-w-0">
+        {/* Swap "Fattesing" for the authenticated user's name once wired to AuthContext */}
+        <Topbar name="Fattesing" />
+
+        <main className="px-6 py-8 space-y-6 max-w-[1400px] mx-auto">
+          <SecurityHealth
+            score={92}
+            status="SECURE"
+            lastScan="2 minutes ago"
+            repoCount={REPOSITORIES.length}
+            openFindings={totalOpenFindings}
+          />
+
+          <MetricsGrid counts={SEVERITY_COUNTS} onSelect={(severity) => console.log("filter by", severity)} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+            <div className="lg:col-span-2">
+              <TrendChart data={TREND_DATA} labels={TREND_LABELS} />
+            </div>
+            <RecentActivity events={RECENT_ACTIVITY} />
+          </div>
+
+          <RepositoryTable repos={REPOSITORIES} />
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-stretch">
+            <div className="lg:col-span-2">
+              <CriticalFindings findings={CRITICAL_FINDINGS} onViewAll={() => console.log("navigate to /findings")} />
+            </div>
+            <QuickActions onAction={(label) => console.log("action:", label)} />
+          </div>
+        </main>
+      </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Geist:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+        @keyframes heartbeat {
+          from { transform: translateX(0); }
+          to { transform: translateX(-600px); }
+        }
+        .animate-heartbeat {
+          animation: heartbeat 4s linear infinite;
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .animate-heartbeat { animation: none !important; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+export default Dashboard;

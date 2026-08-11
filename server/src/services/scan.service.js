@@ -17,15 +17,19 @@ export const startScan = async (projectId, userId) => {
     throw new ApiError(404, "Project not found");
   }
 
-  // Create scan
-  const scan = await Scan.create({
-    project: project._id,
-    status: "Scanning",
-  });
-
+  let scan;
   let repositoryPath;
 
   try {
+    project.status = "Scanning";
+    await project.save();
+
+    // Create scan
+    scan = await Scan.create({
+      project: project._id,
+      status: "Scanning",
+    });
+
     // Clone repository
     repositoryPath = await cloneRepository(
       project.repositoryUrl,
@@ -36,25 +40,34 @@ export const startScan = async (projectId, userId) => {
     const semgrepResult = await runSemgrep(repositoryPath);
 
     // Save findings
-    const findingCount = await createFindingsFromSemgrep(
+    const { findingCount, summary } = await createFindingsFromSemgrep(
       project._id,
       scan._id,
       semgrepResult.results
     );
 
+    scan.summary = summary;
+
     // Update scan status
     scan.status = "Completed";
     scan.completedAt = new Date();
+    project.status = "Completed";
 
-    await scan.save();
+    await Promise.all([scan.save(), project.save()]);
 
     console.log("✅ Scan completed");
     console.log(`📌 Findings saved: ${findingCount}`);
 
     return scan;
   } catch (error) {
-    scan.status = "Failed";
-    await scan.save();
+    project.status = "Failed";
+
+    if (scan) {
+      scan.status = "Failed";
+      await Promise.all([scan.save(), project.save()]);
+    } else {
+      await project.save();
+    }
 
     throw error;
   } finally {

@@ -3,6 +3,25 @@ import Scan from "../models/scan.model.js";
 import ApiError from "../utils/ApiError.js";
 
 const FALLBACK_FINDING_TITLE = "Semgrep Finding";
+const CRITICAL_CHECK_ID_PATTERNS = [
+  /(^|[-_.])sql[-_.]?injection($|[-_.])/,
+  /(^|[-_.])command[-_.]?injection($|[-_.])/,
+  /(^|[-_.])remote[-_.]?code[-_.]?execution($|[-_.])/,
+  /(^|[-_.])hardcoded[-_.]?secret($|[-_.])/,
+  /(^|[-_.])hardcoded[-_.]?password($|[-_.])/,
+  /(^|[-_.])hardcoded[-_.]?token($|[-_.])/,
+  /(^|[-_.])jwt[-_.]?none[-_.]?algorithm($|[-_.])/,
+  /(^|[-_.])deserialization($|[-_.])/
+];
+
+const CRITICAL_CWE_CODES = new Set([
+  "cwe-77",  // Command Injection
+  "cwe-78",  // OS Command Injection
+  "cwe-89",  // SQL Injection
+  "cwe-94",  // Code Injection
+  "cwe-502", // Deserialization of Untrusted Data
+  "cwe-798"  // Hardcoded Credentials
+]);
 
 const toStringValue = (value, fallback = "") => {
   if (typeof value === "string") {
@@ -44,12 +63,59 @@ const normalizeSeverity = (severity) => {
   }
 };
 
+const isCriticalSemgrepResult = (result) => {
+  const checkId = toStringValue(result?.check_id, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-");
+
+  if (CRITICAL_CHECK_ID_PATTERNS.some((pattern) => pattern.test(checkId))) {
+    return true;
+  }
+
+  const cweText = toStringValue(result?.extra?.metadata?.cwe, "").toLowerCase();
+
+  for (const cweCode of CRITICAL_CWE_CODES) {
+    if (cweText.includes(cweCode)) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const resolveFindingSeverity = (result) => {
+  if (isCriticalSemgrepResult(result)) {
+    return "Critical";
+  }
+
+  return normalizeSeverity(result?.extra?.severity);
+};
+
 const normalizeLine = (line) => {
   const parsedLine = Number(line);
 
   return Number.isInteger(parsedLine) && parsedLine > 0
     ? parsedLine
     : null;
+};
+
+const createEmptySeveritySummary = () => ({
+  critical: 0,
+  high: 0,
+  medium: 0,
+  low: 0,
+  score: 100,
+});
+
+const calculateSecurityScore = (summary) => {
+  const securityScore =
+    100 -
+    summary.critical * 20 -
+    summary.high * 5 -
+    summary.medium * 2 -
+    summary.low * 0.5;
+
+  return Math.max(0, Math.round(securityScore));
 };
 
 const mapSemgrepResultToFinding = (projectId, scanId, result) => ({
@@ -63,7 +129,7 @@ const mapSemgrepResultToFinding = (projectId, scanId, result) => ({
     result.extra?.message,
     "No description available"
   ),
-  severity: normalizeSeverity(result.extra?.severity),
+  severity: resolveFindingSeverity(result),
   category: toStringValue(
     result.extra?.metadata?.category,
     "General"
@@ -75,6 +141,31 @@ const mapSemgrepResultToFinding = (projectId, scanId, result) => ({
     "Review the affected code and follow secure coding practices."
   ),
 });
+
+const buildSeveritySummary = (findings) => {
+  const summary = createEmptySeveritySummary();
+
+  for (const finding of findings) {
+    switch (finding.severity) {
+      case "Critical":
+        summary.critical += 1;
+        break;
+      case "High":
+        summary.high += 1;
+        break;
+      case "Medium":
+        summary.medium += 1;
+        break;
+      default:
+        summary.low += 1;
+        break;
+    }
+  }
+
+  summary.score = calculateSecurityScore(summary);
+
+  return summary;
+};
 
 export const createFinding = async (
   scanId,
@@ -223,5 +314,8 @@ export const createFindingsFromSemgrep = async (
     await Finding.insertMany(findings);
   }
 
-  return findings.length;
+  return {
+    findingCount: findings.length,
+    summary: buildSeveritySummary(findings),
+  };
 };
