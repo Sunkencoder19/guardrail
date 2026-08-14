@@ -3,6 +3,8 @@
 
 # Environment
 **/.env
+**/.env.*
+!**/.env.example
 
 # Logs
 *.log
@@ -12,6 +14,7 @@
 
 # Build
 dist
+build
 
 # Coverage
 coverage
