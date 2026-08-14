@@ -12,7 +12,9 @@ export const runSemgrep = async (repositoryPath) => {
 
     const args = ["scan", "--config", "auto", "--json", repositoryPath];
 
-    const { stdout } = await execFilePromise("semgrep", args, {
+    const semgrepBin = process.env.SEMGREP_BIN || "semgrep";
+
+    const { stdout } = await execFilePromise(semgrepBin, args, {
       maxBuffer: 20 * 1024 * 1024,
       timeout: 5 * 60 * 1000,
       killSignal: "SIGKILL",
