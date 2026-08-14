@@ -110,12 +110,27 @@ export const getDashboard = async (userId) => {
   })
     .populate("project", "name")
     .sort({
-      completedAt: 1,
       createdAt: 1,
     })
     .lean();
 
   const lastScan = scans[scans.length - 1] || null;
+
+  const latestCompletedScanByProject = new Map();
+
+  for (const scan of scans) {
+    if (scan.status === "Completed") {
+      latestCompletedScanByProject.set(
+        String(scan.project?._id || scan.project),
+        scan
+      );
+    }
+  }
+
+  const latestCompletedScanIds = Array.from(
+    latestCompletedScanByProject.values(),
+    (scan) => scan._id
+  );
 
   const recentActivity = scans.slice(-5).reverse().map((scan) => ({
     id: scan._id,
@@ -193,8 +208,8 @@ export const getDashboard = async (userId) => {
   const severityStats = await Finding.aggregate([
     {
       $match: {
-        project: {
-          $in: projectIds,
+        scan: {
+          $in: latestCompletedScanIds,
         },
       },
     },
@@ -244,8 +259,8 @@ export const getDashboard = async (userId) => {
   const overallStatus = getStatusFromScore(overallScore);
 
   const findings = await Finding.find({
-    project: {
-      $in: projectIds,
+    scan: {
+      $in: latestCompletedScanIds,
     },
   })
     .populate("project", "name repositoryName")

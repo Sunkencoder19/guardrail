@@ -14,12 +14,14 @@ import Landing from "./pages/Landing";
 function App() {
   return (
     <Routes>
+      {/* Public Routes */}
       <Route path="/" element={<Landing />} />
 
       <Route path="/login" element={<Login />} />
 
       <Route path="/register" element={<Register />} />
 
+      {/* Protected Routes */}
       <Route
         path="/dashboard"
         element={
@@ -65,6 +67,7 @@ function App() {
         }
       />
 
+      {/* All Scan Reports */}
       <Route
         path="/reports"
         element={
@@ -74,15 +77,7 @@ function App() {
         }
       />
 
-      <Route
-        path="/reports/:reportId"
-        element={
-          <ProtectedRoute>
-            <Report />
-          </ProtectedRoute>
-        }
-      />
-
+      {/* Individual Scan Report */}
       <Route
         path="/report/:scanId"
         element={
@@ -92,6 +87,7 @@ function App() {
         }
       />
 
+      {/* Fallback */}
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

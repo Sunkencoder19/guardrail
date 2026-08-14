@@ -36,6 +36,16 @@ const findingSchema = new mongoose.Schema(
       required: true,
     },
 
+    owasp: {
+      type: [String],
+      default: [],
+    },
+
+    cwe: {
+      type: [String],
+      default: [],
+    },
+
     file: {
       type: String,
       default: null,

@@ -6,24 +6,51 @@ import { runSemgrep } from "./semgrep.service.js";
 import { createFindingsFromSemgrep } from "./finding.service.js";
 import { cleanupRepository } from "./cleanup.service.js";
 
-export const startScan = async (projectId, userId) => {
-  // Verify the project belongs to the logged-in user
-  const project = await Project.findOne({
-    _id: projectId,
-    owner: userId,
-  });
+// Atomically claim the project for scanning so two concurrent requests
+// (double-click, two tabs) can't both start a scan. Exported separately
+// from startScan so it can be tested without invoking the real
+// clone+Semgrep pipeline.
+export const claimProjectForScan = async (projectId, userId) => {
+  const project = await Project.findOneAndUpdate(
+    {
+      _id: projectId,
+      owner: userId,
+      status: { $ne: "Scanning" },
+    },
+    {
+      status: "Scanning",
+    },
+    {
+      returnDocument: "after",
+    }
+  );
 
   if (!project) {
-    throw new ApiError(404, "Project not found");
+    const existingProject = await Project.findOne({
+      _id: projectId,
+      owner: userId,
+    });
+
+    if (!existingProject) {
+      throw new ApiError(404, "Project not found");
+    }
+
+    throw new ApiError(
+      409,
+      "A scan is already in progress for this project"
+    );
   }
+
+  return project;
+};
+
+export const startScan = async (projectId, userId) => {
+  const project = await claimProjectForScan(projectId, userId);
 
   let scan;
   let repositoryPath;
 
   try {
-    project.status = "Scanning";
-    await project.save();
-
     // Create scan
     scan = await Scan.create({
       project: project._id,
@@ -90,6 +117,19 @@ export const getProjectScans = async (projectId, userId) => {
   }).sort({
     createdAt: -1,
   });
+
+  return scans;
+};
+
+export const getAllScans = async (userId) => {
+  const projects = await Project.find({ owner: userId }).select("_id");
+  const projectIds = projects.map((project) => project._id);
+
+  const scans = await Scan.find({
+    project: { $in: projectIds },
+  })
+    .populate("project", "name repositoryName")
+    .sort({ createdAt: -1 });
 
   return scans;
 };

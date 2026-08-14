@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, NavLink, useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
-  ArrowUpRight,
   ChevronDown,
   CircleAlert,
   CircleCheck,
@@ -13,7 +12,6 @@ import {
   LayoutDashboard,
   LoaderCircle,
   Lock,
-  MoreHorizontal,
   Plus,
   RefreshCw,
   ScanLine,
@@ -65,6 +63,13 @@ const SECURITY_STYLE = {
     border: "border-[#F0747A]/25",
     surface: "bg-[#F0747A]/[0.08]",
     icon: ShieldAlert,
+  },
+  UNSCANNED: {
+    label: "UNSCANNED",
+    text: "text-[#9AA4B5]",
+    border: "border-[#9AA4B5]/25",
+    surface: "bg-[#9AA4B5]/[0.07]",
+    icon: CircleAlert,
   },
 };
 
@@ -204,22 +209,15 @@ function StatusPill({ project }) {
   return <span className={`inline-flex items-center border px-2 py-1 font-mono text-[10px] font-medium tracking-[0.08em] ${SCAN_STYLE[project.status] || SCAN_STYLE.Pending}`}>{project.status?.toUpperCase() || "PENDING"}</span>;
 }
 
-function ProjectCard({ project, menuId, onMenuToggle, onScan, onDelete }) {
-  const navigate = useNavigate();
-  const security = SECURITY_STYLE[project.securityStatus] || SECURITY_STYLE.SECURE;
+function ProjectCard({ project, onScan, onDelete }) {
+  const security = SECURITY_STYLE[project.securityStatus] || SECURITY_STYLE.UNSCANNED;
   const SecurityIcon = security.icon;
   const isScanning = project.status === "Scanning";
   const isFailed = project.status === "Failed";
 
   return (
     <article className="group relative border border-[#20242E] bg-[#12151C] transition-colors hover:border-[#343B49] hover:bg-[#141820]">
-      <button
-        type="button"
-        onClick={() => navigate(`/projects/${project.id}`)}
-        className="absolute inset-0 z-0 cursor-pointer"
-        aria-label={`Open ${project.name}`}
-      />
-      <div className="relative z-10 p-5 sm:p-6 pointer-events-none">
+      <div className="relative z-10 p-5 sm:p-6">
         <div className="flex items-start justify-between gap-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2.5">
@@ -231,8 +229,8 @@ function ProjectCard({ project, menuId, onMenuToggle, onScan, onDelete }) {
 
           <div className="shrink-0 text-right">
             <div className="flex items-baseline justify-end gap-0.5 font-mono">
-              <span className="text-[29px] leading-none tracking-[-0.08em] text-[#F5F6F8]">{project.securityScore}</span>
-              <span className="text-[10px] text-[#687184]">/100</span>
+              <span className="text-[29px] leading-none tracking-[-0.08em] text-[#F5F6F8]">{project.securityScore ?? "—"}</span>
+              {project.securityScore != null && <span className="text-[10px] text-[#687184]">/100</span>}
             </div>
             <span className={`mt-2 inline-flex items-center gap-1 border px-1.5 py-0.5 font-mono text-[9px] font-medium tracking-[0.1em] ${security.text} ${security.border} ${security.surface}`}>
               <SecurityIcon className="h-2.5 w-2.5" /> {security.label}
@@ -252,19 +250,19 @@ function ProjectCard({ project, menuId, onMenuToggle, onScan, onDelete }) {
 
         <div className="mt-4 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-[11px]">
-            <Link to={`/findings?project=${project.id}`} onClick={(event) => event.stopPropagation()} className="pointer-events-auto inline-flex items-center gap-1.5 text-[#BEC5D0] transition-colors hover:text-[#F5F6F8]">
+            <Link to={`/findings?projectId=${project.id}`} className="inline-flex items-center gap-1.5 text-[#BEC5D0] transition-colors hover:text-[#F5F6F8]">
               <ShieldX className="h-3.5 w-3.5 text-[#F2C46D]" />
               <span className="font-mono text-[12px] text-[#E6E9EF]">{project.findingsCount}</span> {project.findingsCount === 1 ? "finding" : "findings"}
             </Link>
             {project.latestScanId ? (
-              <Link to={`/findings?project=${project.id}&scan=${project.latestScanId}`} onClick={(event) => event.stopPropagation()} className="pointer-events-auto inline-flex items-center gap-1.5 text-[#7A8291] transition-colors hover:text-[#D6DCE6]"><Clock3 className="h-3.5 w-3.5" /> Last scan <span className="font-mono text-[#B9C0CE]">{relativeTime(project.lastScanAt)}</span></Link>
+              <Link to={`/findings?projectId=${project.id}`} className="inline-flex items-center gap-1.5 text-[#7A8291] transition-colors hover:text-[#D6DCE6]"><Clock3 className="h-3.5 w-3.5" /> Last scan <span className="font-mono text-[#B9C0CE]">{relativeTime(project.lastScanAt)}</span></Link>
             ) : (
               <span className="inline-flex items-center gap-1.5 text-[#7A8291]"><Clock3 className="h-3.5 w-3.5" /> Last scan <span className="font-mono text-[#B9C0CE]">{relativeTime(project.lastScanAt)}</span></span>
             )}
             <StatusPill project={project} />
           </div>
 
-          <div className="flex items-center gap-2 pointer-events-auto">
+          <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => onScan(project)}
@@ -276,21 +274,7 @@ function ProjectCard({ project, menuId, onMenuToggle, onScan, onDelete }) {
               {isScanning ? <LoaderCircle className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
               {isScanning ? "SCANNING" : isFailed ? "RETRY SCAN" : "SCAN"}
             </button>
-            <Link to={`/projects/${project.id}`} onClick={(event) => event.stopPropagation()} className="inline-flex h-8 items-center gap-1.5 border border-[#303745] px-3 font-mono text-[10px] font-medium tracking-[0.08em] text-[#C4CAD5] transition-colors hover:border-[#4A5364] hover:bg-[#1A1F29]">
-              OPEN <ArrowUpRight className="h-3 w-3" />
-            </Link>
-            <div className="relative">
-              <button type="button" onClick={(event) => { event.stopPropagation(); onMenuToggle(project.id); }} className="grid h-8 w-8 place-items-center border border-[#303745] text-[#8B92A0] transition-colors hover:border-[#4A5364] hover:bg-[#1A1F29] hover:text-[#E8EAF0]" aria-label={`Actions for ${project.name}`}><MoreHorizontal className="h-4 w-4" /></button>
-              {menuId === project.id && (
-                <div className="absolute right-0 bottom-10 z-20 w-44 border border-[#343B49] bg-[#191E27] p-1 shadow-2xl">
-                  <Link to={`/projects/${project.id}`} className="flex items-center gap-2 px-3 py-2 text-[11px] text-[#C8CED9] hover:bg-[#252B37]">Open project</Link>
-                  <button onClick={() => onScan(project)} disabled={isScanning} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#C8CED9] hover:bg-[#252B37] disabled:text-[#606879]">Scan repository</button>
-                  <Link to={`/findings?project=${project.id}`} className="flex items-center gap-2 px-3 py-2 text-[11px] text-[#C8CED9] hover:bg-[#252B37]">View findings</Link>
-                  <div className="my-1 border-t border-[#303745]" />
-                  <button onClick={() => onDelete(project)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[11px] text-[#F48B90] hover:bg-[#F0747A]/10"><Trash2 className="h-3 w-3" /> Delete project</button>
-                </div>
-              )}
-            </div>
+            <button type="button" onClick={() => onDelete(project)} className="inline-flex h-8 items-center gap-1.5 border border-[#F0747A]/30 bg-[#F0747A]/[0.06] px-3 font-mono text-[10px] font-medium tracking-[0.08em] text-[#F28A8F] transition-colors hover:bg-[#F0747A]/15" aria-label={`Delete ${project.name}`}><Trash2 className="h-3 w-3" /> DELETE</button>
           </div>
         </div>
       </div>
@@ -395,7 +379,6 @@ function Projects() {
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [sort, setSort] = useState("recent");
-  const [menuId, setMenuId] = useState(null);
   const [addOpen, setAddOpen] = useState(false);
   const [deleteProject, setDeleteProject] = useState(null);
   const [scanningIds, setScanningIds] = useState(() => new Set());
@@ -417,7 +400,6 @@ function Projects() {
 
   const handleScan = async (project) => {
     if (project.status === "Scanning" || scanningIds.has(project.id)) return;
-    setMenuId(null);
     setScanningIds((current) => new Set(current).add(project.id));
     setProjects((current) => current.map((item) => (item.id === project.id ? { ...item, status: "Scanning" } : item)));
     try {
@@ -425,8 +407,13 @@ function Projects() {
       toast.success(`${project.name} scan completed.`);
       await loadProjects();
     } catch (requestError) {
-      setProjects((current) => current.map((item) => (item.id === project.id ? { ...item, status: "Failed" } : item)));
-      toast.error(requestError.response?.data?.message || "Scan failed. You can retry the repository scan.");
+      if (requestError.response?.status === 409) {
+        toast.error(requestError.response?.data?.message || "A scan is already in progress for this project.");
+        await loadProjects();
+      } else {
+        setProjects((current) => current.map((item) => (item.id === project.id ? { ...item, status: "Failed" } : item)));
+        toast.error(requestError.response?.data?.message || "Scan failed. You can retry the repository scan.");
+      }
     } finally {
       setScanningIds((current) => { const next = new Set(current); next.delete(project.id); return next; });
     }
@@ -469,8 +456,8 @@ function Projects() {
             <label className="flex h-8 w-fit items-center gap-2 border border-[#303745] bg-[#101319] px-2.5 font-mono text-[10px] text-[#7F8899]">SORT <select value={sort} onChange={(event) => setSort(event.target.value)} className="cursor-pointer appearance-none bg-transparent pr-1 text-[10px] text-[#D5DAE3] outline-none">{SORTS.map((item) => <option key={item.id} value={item.id} className="bg-[#171B25]">{item.label}</option>)}</select><ChevronDown className="-ml-3 h-3 w-3 pointer-events-none" /></label>
           </section>
 
-          <section className="mt-5" onClick={() => menuId && setMenuId(null)}>
-            {loading ? <div className="grid gap-3"><ProjectSkeleton /><ProjectSkeleton /><ProjectSkeleton /></div> : loadError ? <div className="border border-[#5A3439] bg-[#F0747A]/[0.05] px-6 py-14 text-center"><CircleAlert className="mx-auto h-5 w-5 text-[#F28A8F]" /><h2 className="mt-3 text-[16px] font-medium">Unable to load projects</h2><p className="mt-1 text-[12px] text-[#939CAC]">Something went wrong while retrieving your repositories.</p><button onClick={loadProjects} className="mt-5 inline-flex h-8 items-center gap-1.5 border border-[#F0747A]/30 px-3 font-mono text-[10px] text-[#F5A0A4] hover:bg-[#F0747A]/10"><RefreshCw className="h-3 w-3" /> RETRY</button></div> : projects.length === 0 ? <EmptyState onAdd={() => setAddOpen(true)} /> : visibleProjects.length === 0 ? <div className="border border-dashed border-[#303745] bg-[#101319] px-6 py-16 text-center"><Search className="mx-auto h-5 w-5 text-[#616A7B]" /><p className="mt-3 text-[14px] text-[#D6DBE4]">No matching repositories</p><button onClick={() => { setQuery(""); setFilter("all"); }} className="mt-3 font-mono text-[10px] text-[#94A5FF] hover:text-[#C3CCFF]">CLEAR FILTERS</button></div> : <div className="grid gap-3">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} menuId={menuId} onMenuToggle={(id) => setMenuId((current) => current === id ? null : id)} onScan={handleScan} onDelete={(item) => { setMenuId(null); setDeleteProject(item); }} />)}</div>}
+          <section className="mt-5">
+            {loading ? <div className="grid gap-3"><ProjectSkeleton /><ProjectSkeleton /><ProjectSkeleton /></div> : loadError ? <div className="border border-[#5A3439] bg-[#F0747A]/[0.05] px-6 py-14 text-center"><CircleAlert className="mx-auto h-5 w-5 text-[#F28A8F]" /><h2 className="mt-3 text-[16px] font-medium">Unable to load projects</h2><p className="mt-1 text-[12px] text-[#939CAC]">Something went wrong while retrieving your repositories.</p><button onClick={loadProjects} className="mt-5 inline-flex h-8 items-center gap-1.5 border border-[#F0747A]/30 px-3 font-mono text-[10px] text-[#F5A0A4] hover:bg-[#F0747A]/10"><RefreshCw className="h-3 w-3" /> RETRY</button></div> : projects.length === 0 ? <EmptyState onAdd={() => setAddOpen(true)} /> : visibleProjects.length === 0 ? <div className="border border-dashed border-[#303745] bg-[#101319] px-6 py-16 text-center"><Search className="mx-auto h-5 w-5 text-[#616A7B]" /><p className="mt-3 text-[14px] text-[#D6DBE4]">No matching repositories</p><button onClick={() => { setQuery(""); setFilter("all"); }} className="mt-3 font-mono text-[10px] text-[#94A5FF] hover:text-[#C3CCFF]">CLEAR FILTERS</button></div> : <div className="grid gap-3">{visibleProjects.map((project) => <ProjectCard key={project.id} project={project} onScan={handleScan} onDelete={setDeleteProject} />)}</div>}
           </section>
         </div>
       </main>

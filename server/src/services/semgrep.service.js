@@ -1,8 +1,8 @@
-import { exec } from "child_process";
+import { execFile } from "child_process";
 import util from "util";
 import ApiError from "../utils/ApiError.js";
 
-const execPromise = util.promisify(exec);
+const execFilePromise = util.promisify(execFile);
 
 export const runSemgrep = async (repositoryPath) => {
   try {
@@ -10,11 +10,13 @@ export const runSemgrep = async (repositoryPath) => {
     console.log("Running Semgrep...");
     console.log("Repository:", repositoryPath);
 
-    const command = `semgrep scan --config auto --json "${repositoryPath}"`;
+    const args = ["scan", "--config", "auto", "--json", repositoryPath];
 
-    console.log("Command:", command);
-
-    const { stdout } = await execPromise(command);
+    const { stdout } = await execFilePromise("semgrep", args, {
+      maxBuffer: 20 * 1024 * 1024,
+      timeout: 5 * 60 * 1000,
+      killSignal: "SIGKILL",
+    });
 
     const result = JSON.parse(stdout);
 

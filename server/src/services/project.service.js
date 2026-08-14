@@ -23,7 +23,7 @@ const getSecurityStatus = (securityScore) => {
   return "AT_RISK";
 };
 
-const getSeverityCounts = async (projectId) => {
+const getSeverityCounts = async (scanId) => {
   const severityCounts = {
     critical: 0,
     high: 0,
@@ -32,7 +32,7 @@ const getSeverityCounts = async (projectId) => {
   };
 
   const results = await Finding.aggregate([
-    { $match: { project: projectId } },
+    { $match: { scan: scanId } },
     { $group: { _id: "$severity", count: { $sum: 1 } } },
   ]);
 
@@ -57,20 +57,26 @@ const getSeverityCounts = async (projectId) => {
 };
 
 const buildProjectSummary = async (project) => {
-  const [severityCounts, latestScan] = await Promise.all([
-    getSeverityCounts(project._id),
-    Scan.findOne({ project: project._id })
-      .sort({ createdAt: -1 })
-      .select("_id createdAt completedAt")
-      .lean(),
-  ]);
+  const latestScan = await Scan.findOne({
+    project: project._id,
+    status: "Completed",
+  })
+    .sort({ completedAt: -1, createdAt: -1 })
+    .select("_id createdAt completedAt")
+    .lean();
+
+  const severityCounts = latestScan
+    ? await getSeverityCounts(latestScan._id)
+    : { critical: 0, high: 0, medium: 0, low: 0 };
 
   const findingsCount =
     severityCounts.critical +
     severityCounts.high +
     severityCounts.medium +
     severityCounts.low;
-  const securityScore = calculateSecurityScore(severityCounts);
+  const securityScore = latestScan
+    ? calculateSecurityScore(severityCounts)
+    : null;
 
   return {
     id: project._id.toString(),
@@ -84,7 +90,7 @@ const buildProjectSummary = async (project) => {
     forks: project.forks,
     language: project.language,
     status: project.status,
-    securityStatus: getSecurityStatus(securityScore),
+    securityStatus: securityScore == null ? null : getSecurityStatus(securityScore),
     securityScore,
     findingsCount,
     lastScanAt: latestScan?.completedAt || latestScan?.createdAt || null,
@@ -92,13 +98,29 @@ const buildProjectSummary = async (project) => {
   };
 };
 
+const GITHUB_URL_PATTERN =
+  /^https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/?$/i;
+
 export const createProject = async (projectData) => {
+  if (!GITHUB_URL_PATTERN.test(projectData.repositoryUrl || "")) {
+    throw new ApiError(
+      400,
+      "Enter a valid public GitHub repository URL."
+    );
+  }
+
   // Fetch repository details from GitHub
   const repository = await fetchRepository(projectData.repositoryUrl);
+
+  // Store the repository URL rebuilt from GitHub's confirmed owner/repo
+  // rather than the raw client-supplied string, so nothing beyond a
+  // plain https://github.com/<owner>/<repo> URL can ever be persisted.
+  const repositoryUrl = `https://github.com/${repository.owner}/${repository.repositoryName}`;
 
   // Create project with GitHub metadata
   const project = await Project.create({
     ...projectData,
+    repositoryUrl,
     repositoryName: repository.repositoryName,
     description: repository.description,
     defaultBranch: repository.defaultBranch,

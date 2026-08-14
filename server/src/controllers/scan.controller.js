@@ -1,6 +1,7 @@
 import {
   startScan,
   getProjectScans,
+  getAllScans,
   getScanById,
 } from "../services/scan.service.js";
 
@@ -27,6 +28,20 @@ export const getProjectScansController = async (req, res, next) => {
       req.params.projectId,
       req.user._id
     );
+
+    res.status(200).json({
+      success: true,
+      count: scans.length,
+      data: scans,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+export const getAllScansController = async (req, res, next) => {
+  try {
+    const scans = await getAllScans(req.user._id);
 
     res.status(200).json({
       success: true,

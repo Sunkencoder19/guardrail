@@ -60,7 +60,7 @@ export const getReport = async (scanId, userId) => {
   return {
   scan: {
     ...scan.toObject(),
-    durationseconds,
+    durationseconds: duration,
   },
 
   project: {

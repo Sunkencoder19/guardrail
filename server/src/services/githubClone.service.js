@@ -7,7 +7,11 @@ import ApiError from "../utils/ApiError.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const git = simpleGit();
+const git = simpleGit({
+  timeout: {
+    block: 5 * 60 * 1000,
+  },
+});
 
 export const cloneRepository = async (repositoryUrl, scanId) => {
   const repoName = repositoryUrl.split("/").pop();
@@ -27,7 +31,7 @@ export const cloneRepository = async (repositoryUrl, scanId) => {
   }
 
   try {
-    await git.clone(repositoryUrl, clonePath);
+    await git.clone(repositoryUrl, clonePath, ["--depth", "1"]);
 
     return clonePath;
   } catch (error) {

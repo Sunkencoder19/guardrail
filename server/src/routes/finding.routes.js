@@ -3,6 +3,7 @@ import authenticate from "../middleware/auth.middleware.js";
 
 import {
   createFindingController,
+  getAllFindingsController,
   getScanFindingsController,
   getFindingByIdController,
 } from "../controllers/finding.controller.js";
@@ -10,6 +11,9 @@ import {
 const router = express.Router();
 
 router.use(authenticate);
+
+// Global findings workspace
+router.get("/", getAllFindingsController);
 
 // Create a finding for a scan
 router.post("/:scanId", createFindingController);

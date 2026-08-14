@@ -1,7 +1,9 @@
 import express from "express";
 import cors from "cors";
+import helmet from "helmet";
 import indexRoutes from "./routes/index.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
+import { apiLimiter } from "./middleware/rateLimit.middleware.js";
 import projectRoutes from "./routes/project.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import scanRoutes from "./routes/scan.routes.js";
@@ -11,14 +13,22 @@ import reportRoutes from "./routes/report.routes.js";
 
 const app = express();
 
+const allowedOrigins = (process.env.CLIENT_URL || "http://localhost:5173")
+  .split(",")
+  .map((origin) => origin.trim());
+
+app.use(helmet());
+
 app.use(
   cors({
-    origin: true,
+    origin: allowedOrigins,
     credentials: true,
   })
 );
 
 app.use(express.json());
+
+app.use("/api", apiLimiter);
 
 app.use("/", indexRoutes);
 
